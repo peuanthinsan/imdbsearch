@@ -175,14 +175,14 @@ After indexing is finished, the API can be accessed at `http://localhost:8000/?n
 It helped to focus on defining assumptions towards crawling, parsing, and indexing.
 
 Crawling and parsing was simplified by assuming:
-- a fixed data set
-- no network errors
-- a fixed URL structure: i.e. `/search/title?page=[1 through 20]` (and exactly 20 list pages)
-- a fixed HTML structure for all list and movie pages
+- a fixed data set (so reindexing wasn't important)
+- no network errors (`def pageSoup`)
+- a fixed URL structure (`line 51`): i.e. `/search/title?page=[1 through 20]` (and exactly 20 list pages)
+- a fixed HTML structure for all list and movie pages (`def pageSummary`)
 
 Search and indexing was simplified by assuming:
-- a search and index primarily and only for peoples' names
-- the search results will be small number of peoples' names (as keys) that will fit in memory
+- a search and index primarily and only for peoples' names (`def index`)
+- the search results will be small number of peoples' names (as keys) that will fit in memory (`self.cache`)
 
 ## Possible Improvements
 If I had more time to improve the quality and architecture of this code, these are some things I could work on:
