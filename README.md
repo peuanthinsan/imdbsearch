@@ -177,7 +177,7 @@ It helped to focus on defining assumptions towards crawling, parsing, and indexi
 Crawling and parsing was simplified by assuming:
 - a fixed data set (so reindexing wasn't important)
 - no network errors (`def pageSoup`)
-- a fixed URL structure (`line 51`): i.e. `/search/title?page=[1 through 20]` (and exactly 20 list pages)
+- a fixed URL structure (`line 27`, `line 51`): i.e. `/search/title?page=[1 through 20]` (and exactly 20 list pages)
 - a fixed HTML structure for all list and movie pages (`def pageSummary`)
 
 Search and indexing was simplified by assuming:
