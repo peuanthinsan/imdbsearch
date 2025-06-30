@@ -1,13 +1,18 @@
-import requests
 import json
 import logging
 from urllib.parse import urlencode
-from bs4 import BeautifulSoup as soup
 from multiprocessing import Pool
+
+import requests
+from bs4 import BeautifulSoup as soup
 
 
 class PeopleAndMovies:
     BASE_URL = "http://www.imdb.com"
+    DEFAULT_HEADERS = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
 
     def __init__(self, list_page_url_start="/search/title", pages=20, params=None):
         self.cache = {}
@@ -38,7 +43,11 @@ class PeopleAndMovies:
 
     def pageSoup(self, page_url):
         try:
-            r = requests.get(self.BASE_URL + page_url, timeout=10)
+            r = requests.get(
+                self.BASE_URL + page_url,
+                headers=self.DEFAULT_HEADERS,
+                timeout=10,
+            )
             if r.status_code == 200:
                 return soup(r.text, "html.parser")
         except requests.RequestException as e:
@@ -48,32 +57,52 @@ class PeopleAndMovies:
     def parseUrls(self, list_page_url):
         page_soup = self.pageSoup(list_page_url)
         if page_soup and "/search/title" in list_page_url:
-            movie_titles = page_soup.select("#main .lister-item .lister-item-header a")
-            return [title["href"] for title in movie_titles]
+            script = page_soup.find('script', id='__NEXT_DATA__')
+            if script:
+                try:
+                    data = json.loads(script.string)
+                    items = (
+                        data["props"]["pageProps"]["searchResults"]["titleResults"]["titleListItems"]
+                    )
+                    return [f"/title/{item['titleId']}/" for item in items]
+                except Exception as e:
+                    logging.error("Failed to parse list page %s: %s", list_page_url, e)
         return []
 
     def pageSummary(self, page_url):
         page_soup = self.pageSoup(page_url)
         if not page_soup:
             return None
-        overview = page_soup.find(id="title-overview-widget")
-        if overview:
-            title = overview.find("h1", attrs={"itemprop": "name"})
-            year_node = title.find(id="titleYear")
-            if year_node:
-                year_node.decompose()
-            title = title.getText().strip()
+        script = page_soup.find('script', id='__NEXT_DATA__')
+        if not script:
+            return None
+        try:
+            data = json.loads(script.string)
+            main = data['props']['pageProps']['mainColumnData']
+            title = main['titleText']['text']
 
-            plot_summary = overview.find(class_="plot_summary")
-            if plot_summary:
-                directors = [item.find(attrs={"itemprop": "name"}).getText().strip()
-                             for item in plot_summary.findAll(attrs={"itemprop": "director"})]
-                creators = [item.find(attrs={"itemprop": "name"}).getText().strip()
-                            for item in plot_summary.findAll(attrs={"itemprop": "creator"})]
-                actors = [item.find(attrs={"itemprop": "name"}).getText().strip()
-                          for item in plot_summary.findAll(attrs={"itemprop": "actors"})]
+            def extract_people(section):
+                if not section:
+                    return []
+                if isinstance(section, list):
+                    people = []
+                    for entry in section:
+                        for cred in entry.get('credits', []):
+                            name = cred.get('name', {}).get('nameText', {}).get('text')
+                            if name:
+                                people.append(name)
+                    return people
+                if isinstance(section, dict):
+                    return [edge['node']['name']['nameText']['text'] for edge in section.get('edges', [])]
+                return []
 
-                return {title: {"directors": directors, "creators": creators, "actors": actors}}
+            directors = extract_people(main.get('directors'))
+            creators = extract_people(main.get('creators'))
+            actors = extract_people(main.get('cast'))
+
+            return {title: {"directors": directors, "creators": creators, "actors": actors}}
+        except Exception as e:
+            logging.error("Failed to parse page %s: %s", page_url, e)
         return None
 
     def find(self, query):
