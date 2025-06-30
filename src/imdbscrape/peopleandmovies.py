@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from urllib.parse import urlencode
 from multiprocessing import Pool
 
@@ -19,14 +20,16 @@ class PeopleAndMovies:
 
         imdb_params = params if params else {
             "groups": "top_1000",
-            "sort": "user_rating",
+            "sort": "user_rating,desc",
+            "count": 50,
             "view": "simple",
         }
-        list_page_url = f"{list_page_url_start}?{urlencode(imdb_params)}"
+        base_url = f"{list_page_url_start}?{urlencode(imdb_params)}"
 
         # BUILDING LIST OF MOVIE URLS TO CRAWL...
         p = Pool(20)
-        urls = p.map(self.parseUrls, [list_page_url + "&page=" + str(i) for i in range(1, pages + 1)])
+        page_urls = [f"{base_url}&start={50 * (i - 1) + 1}&ref_=adv_nxt" for i in range(1, pages + 1)]
+        urls = p.map(self.parseUrls, page_urls)
         p.terminate()
         p.join()
         urls = [url for chunk in urls if chunk for url in chunk]
@@ -57,16 +60,9 @@ class PeopleAndMovies:
     def parseUrls(self, list_page_url):
         page_soup = self.pageSoup(list_page_url)
         if page_soup and "/search/title" in list_page_url:
-            script = page_soup.find('script', id='__NEXT_DATA__')
-            if script:
-                try:
-                    data = json.loads(script.string)
-                    items = (
-                        data["props"]["pageProps"]["searchResults"]["titleResults"]["titleListItems"]
-                    )
-                    return [f"/title/{item['titleId']}/" for item in items]
-                except Exception as e:
-                    logging.error("Failed to parse list page %s: %s", list_page_url, e)
+            text = page_soup.prettify()
+            ids = set(re.findall(r"/title/tt\d+/", text))
+            return sorted(ids)
         return []
 
     def pageSummary(self, page_url):
