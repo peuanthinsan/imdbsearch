@@ -106,29 +106,37 @@ class PeopleAndMovies:
         return None
 
     def find(self, query):
-        matches = []
-        query_keywords = query.split(' ')
-        for person_name in self.cache.keys():
-            for name_token in person_name.split(' '):
-                for keyword in query_keywords:
-                    if name_token.lower().strip().startswith(keyword.strip()):
-                        matches.append(json.dumps({person_name: self.cache[person_name]}))
-                        break
-        return matches
+        """Return list of people whose name tokens start with the query."""
+        query_tokens = [q.lower() for q in query.split() if q]
+        results = []
+        for person, roles in self.cache.items():
+            name_tokens = [t.lower() for t in person.split()]
+            if any(nt.startswith(q) for q in query_tokens for nt in name_tokens):
+                clean_roles = {
+                    role: sorted(list(titles))
+                    for role, titles in roles.items()
+                    if titles
+                }
+                results.append({person: clean_roles})
+        return results
 
     def index(self, results):
+        """Build a cache mapping people to movies by role."""
         for page_summary in results:
             for title, people in page_summary.items():
-                for role in people.keys():
-                    for person in people[role]:
-                        if person in self.cache:
-                            if role in self.cache[person]:
-                                self.cache[person][role].append(title)
-                            else:
-                                self.cache[person][role] = [title]
-                        else:
-                            self.cache[person] = {role: [title]}
+                for role, persons in people.items():
+                    for person in persons:
+                        entry = self.cache.setdefault(
+                            person,
+                            {
+                                "directors": set(),
+                                "creators": set(),
+                                "actors": set(),
+                            },
+                        )
+                        entry[role].add(title)
 
     def search(self, person_name):
+        """Return a JSON string for people whose name matches the query."""
         results = self.find(person_name)
-        return '[{}]'.format(','.join(results))
+        return json.dumps(results)
